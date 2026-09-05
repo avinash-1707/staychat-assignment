@@ -28,6 +28,37 @@ Invalid JSON and invalid fields return `400` as `{"error":{"code":"invalid_reque
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    Guest[Guest] --> API[POST /chat]
+    API --> Validate[Validate request]
+    Validate --> Interpreter[Gemini interpreter or limited offline fallback]
+    Interpreter --> Facts[Validated candidate facts]
+    Facts --> Merge[Deterministic state merge]
+    Merge --> Dates[Date normalization and validation]
+    Dates --> Decision{Booking details complete?}
+    Decision -- No --> FollowUp[Ask one high-value follow-up]
+    Decision -- Yes --> Engine[Booking engine: capacity, pricing, ranking]
+    Engine --> Policy[Inventory-grounded policy handling]
+    Policy --> Response[Deterministic JSON response]
+    FollowUp --> Response
+    Response --> Sessions[(Lock-protected session repository)]
+
+    subgraph Gemini boundary
+        Interpreter
+        Facts
+    end
+
+    subgraph Python-owned rules
+        Merge
+        Dates
+        Decision
+        Engine
+        Policy
+        Response
+    end
+```
+
 - `app.py` validates the HTTP boundary and delegates each chat turn to `BookingService`.
 - `agent/llm.py` is a thin Gemini `gemini-2.5-flash` adapter behind an injectable interpreter interface.
 - Gemini calls use a 10-second timeout and at most two attempts; provider failures become safe `503` responses.
